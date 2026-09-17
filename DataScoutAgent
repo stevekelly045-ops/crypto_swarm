@@ -1,0 +1,41 @@
+import ccxt
+import pandas as pd
+import time
+import logging
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
+
+class DataScoutAgent:
+    """Agent 1: Handles resilient data fetching from crypto exchanges."""
+    def __init__(self, exchange_id='binance'):
+        exchange_class = getattr(ccxt, exchange_id)
+        self.exchange = exchange_class({
+            'enableRateLimit': True, # Crucial to avoid getting IP banned
+            'options': {'defaultType': 'spot'}
+        })
+        
+    def fetch_market_data(self, symbol='BTC/USDT', timeframe='1h', limit=100, retries=3):
+        """Fetches OHLCV candles with built-in retry logic for network stability."""
+        for attempt in range(retries):
+            try:
+                logging.info(f"[Data Scout] Fetching {limit} candles for {symbol} ({timeframe})...")
+                bars = self.exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
+                
+                # Convert into a structured DataFrame
+                df = pd.DataFrame(bars, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+                df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+                
+                return df
+            except Exception as e:
+                logging.warning(f"[Data Scout] Attempt {attempt + 1} failed: {e}")
+                time.sleep(2) # Wait before retrying
+                
+        logging.error("[Data Scout] Failed to fetch market data after multiple attempts.")
+        return None
+
+# Quick test for Step 1
+if __name__ == "__main__":
+    scout = DataScoutAgent('binance')
+    df_sample = scout.fetch_market_data('BTC/USDT', '1h', 50)
+    if df_sample is not None:
+        print(df_sample.tail(3)) # Print the last 3 rows to confirm clean data
